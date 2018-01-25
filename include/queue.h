@@ -1,6 +1,10 @@
 #ifndef __QUEUE_H__
 #define __QUEUE_H__
 
+#include <stdbool.h>
+#include "utils.h"
+#include "list.h"
+
 typedef struct queue {
   lh q_head;
   int size;
