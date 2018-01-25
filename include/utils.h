@@ -8,4 +8,14 @@
   const typeof(((type *)0)->mbr) *__mptr = ptr;\
   (type *)((char *)__mptr - (char *)offsetof(type, mbr));})
 
+#define swap(a,b) \
+  {\
+    (a) = ((a) ^ (b));\
+    (b) = ((a) ^ (b));\
+    (a) = ((a) ^ (b));\
+  }
+
+#define max(a,b) (a ^ ((a^b) & -(a<b))
+#define min(a,b) (b ^ ((a^b) & -(a<b))
+
 #endif //__UTILS_H__
