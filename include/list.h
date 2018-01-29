@@ -40,7 +40,7 @@ bool is_list_empty(lh *head) {
   return head->next == head->prev;
 }
 
-#define LIST_ITER(node) \
-  for (lh *__n = (node)->next ; __n != (node) ; __n = __n->next)
+#define LIST_ITER(var, node)						\
+  for (lh *var = (node)->next ; var != (node) ; var = var->next)
 
 #endif //__LIST_H__
