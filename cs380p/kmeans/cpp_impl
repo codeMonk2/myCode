@@ -1,0 +1,163 @@
+#include <iostream>
+#include <argparse.h>
+#include <chrono>
+#include <cstring>
+#include <math.h>
+#include <stdlib.h>
+#include <io.h>
+#include <iomanip>
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <random>
+#include <vector>
+#include <cmath>
+#include <time.h>
+
+using namespace std;
+
+std::map<int, std::vector<double>> inputData;
+
+__global__ void cuda_hello()
+{
+    printf("Hello to CUDA!!!\n");
+    return;
+}
+
+void printFunc(unsigned int vals, struct options_t *opts)
+{
+    for (const auto &it : inputData)
+    {
+        for (double m : it.second)
+        {
+            std::cout << setprecision(12) << m << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+void printCentroids(std::vector<std::vector<double>> &centroids)
+{
+    int count = 0;
+    for (auto &pt : centroids)
+    {
+        printf("%d ", count);
+        for(unsigned int i = 0; i < pt.size(); i++)
+        {
+            //std::cout << setprecision(5) << pt[i] << " ";
+            printf("%0.5f", pt[i]);
+            if ((i+1) != pt.size()) printf(" ");
+        }
+        //std::cout << std::endl;
+        printf("\n");
+        count++;
+    }
+}
+
+double euclideanDistance(unsigned int dims, std::vector<double> &point, std::vector<double> &centroid)
+{
+    double sum = 0.0;
+
+    for(unsigned int i = 0; i < dims; i++)
+    {
+        sum += pow((point[i]-centroid[i]), 2);
+    }
+
+    return sqrt(sum);
+}
+
+std::vector<double> calculateMeans(unsigned int dims, const std::vector<std::vector<double>> &points)
+{
+    double sum = 0.0;
+    std::vector<double> centroid;
+
+    for(unsigned int i = 0; i < dims; i++)
+    {
+        sum = 0.0;
+        for( auto &pt : points )
+            sum += pt[i];
+
+        centroid.push_back(sum/points.size());
+    }
+
+    return centroid;
+}
+
+static unsigned long int seed = 8675309;
+static unsigned long kmeans_rmax = 32767;
+unsigned int kmeans_rand() {
+    seed = seed * 1103515245 + 12345;
+    return (unsigned int)(seed/65536) % (kmeans_rmax+1);
+}
+
+void kMeans(std::map<int, std::vector<double>> &inputData,
+            struct options_t *opts)
+{
+    //static std::random_device seed;
+    //static std::mt19937 random_number_generator(seed);
+    //std::uniform_int_distribution<size_t> indices(0, inputData.size() - 1);
+
+    std::vector<std::vector<double>> centroids(opts->nCentroids);
+    double bestDistance = 0.0, distance = 0.0;
+    unsigned int bestCentroid = 0;
+
+    for (auto &centroid : centroids)
+    {
+        //centroid = inputData[indices(random_number_generator)];
+        centroid = inputData[kmeans_rand() % inputData.size()];
+    }
+
+    std::map<int,std::vector<std::vector<double>>> pointCentroidAssignments;
+    clock_t tic = clock();
+    for(int n = 0; n < opts->nIters; n++)
+    {
+        pointCentroidAssignments.clear();
+        for(unsigned int i = 0; i < inputData.size(); i++)
+        {
+            bestDistance = std::numeric_limits<double>::max();
+            bestCentroid = 0;
+            for(int j = 0; j < opts->nCentroids; j++)
+            {
+                distance = euclideanDistance(opts->nDims, inputData[i], centroids[j]);
+                if(distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestCentroid = j;
+                }
+            }
+            std::vector<std::vector<double>> &p = pointCentroidAssignments[bestCentroid];
+            p.push_back(inputData[i]);
+        }
+        centroids.clear();
+        std::map<int,std::vector<std::vector<double>>>::const_iterator it = pointCentroidAssignments.begin();
+        for(int i = 0; i < opts->nCentroids; i++, it++)
+        {
+            centroids.push_back(calculateMeans(opts->nDims, it->second));
+        }
+    }
+    clock_t toc = clock();
+
+    printf("Elapsed: %lf seconds\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+
+    if (opts->bPrintCentroids)
+        printCentroids(centroids);
+}
+
+int main(int argc, char **argv)
+{
+    unsigned int n_vals;
+
+    // Parse args
+    struct options_t opts;
+    get_opts(argc, argv, &opts);
+
+    read_file(&opts, &n_vals, inputData);
+
+    //printFunc(n_vals, &opts);
+
+    //kMeans(inputData, &opts);
+
+    cuda_hello<<<1,1>>>();
+
+    return 0;
+}
