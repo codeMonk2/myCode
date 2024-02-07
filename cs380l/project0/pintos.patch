@@ -1,0 +1,47 @@
+diff -ruN aos_pintos/src/lib/kernel/list.c pintos_solution/src/lib/kernel/list.c
+--- aos_pintos/src/lib/kernel/list.c	2024-01-30 21:43:54.000000000 +0000
++++ pintos_solution/src/lib/kernel/list.c	2024-02-07 09:20:19.909289322 +0000
+@@ -1,5 +1,6 @@
+ #include "list.h"
+ #include "../debug.h"
++#include "threads/thread.h"
+ 
+ /* Our doubly linked lists have two header elements: the "head"
+    just before the first element and the "tail" just after the
+@@ -311,11 +312,32 @@
+     }
+ }
+ 
++static
++bool threadTidCompare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
++{
++    const struct thread *_a = list_entry(a, struct thread, allelem);
++    const struct thread *_b = list_entry(b, struct thread, allelem);
++
++    return (_a->tid < _b->tid) ? true : false;
++}
++
+ int get_sorted_index (struct list *threads, struct thread *target) {
+-  /* Your implementation here */
+-  (void) threads;
+-  (void) target;
+-  return 0;
++    int i = 0;
++    struct list_elem *e = NULL;
++    struct thread *t = NULL;
++
++    if(!threads || !target) {
++        return -1;
++    }
++
++    list_sort(threads, threadTidCompare, NULL);
++
++    for(e = list_begin(threads), i = 0; e != list_end(threads); e = list_next(e), i++)
++    {
++       t = list_entry(e, struct thread, allelem);
++       if (t->tid == target->tid) return i;
++    }
++    return -1;
+ }
+ 
+ /* Returns true only if the list elements A through B (exclusive)
