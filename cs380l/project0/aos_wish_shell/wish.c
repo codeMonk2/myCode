@@ -175,6 +175,8 @@ void handleCmds(char ***pathvals, char ***args, int numCmds)
             // command not found in any path, continue to next one
             if (!cmd) {
                 ERR_MSG;
+                if (fileName)
+                    free(fileName);
                 continue;
             }
             if (fileName != NULL) {
