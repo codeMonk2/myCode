@@ -22,6 +22,8 @@ struct lock
 {
   struct thread *holder;      /* Thread holding lock. */
   struct semaphore semaphore; /* Binary semaphore controlling access. */
+  /* Indicates if lock holder is running with donated prio */
+  bool is_holder_running_with_inherited_prio;
 };
 
 void lock_init (struct lock *);

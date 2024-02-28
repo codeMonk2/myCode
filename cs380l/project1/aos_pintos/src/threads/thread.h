@@ -95,6 +95,14 @@ struct thread
   /* Shared between thread.c and synch.c. */
   struct list_elem elem; /* List element. */
 
+  int64_t wakeup_tick;
+  struct list_elem timer_elem;
+
+  int inherited_priorities[32];
+  int inherited_prio_size;
+  int inheritence_depth;
+  struct lock *waiting_for;
+
 #ifdef USERPROG
   /* Owned by userprog/process.c. */
   uint32_t *pagedir; /* Page directory. */
@@ -139,5 +147,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+bool priority_comparator(const struct list_elem *l1, const struct list_elem *l2, void *aux);
+void sort_ready_list(void);
+void clear_inherited_priority(struct thread *cur, int prio);
 
 #endif /* threads/thread.h */

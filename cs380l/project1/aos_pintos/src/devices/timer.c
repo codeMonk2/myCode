@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
+#include <list.h>
 #include "devices/pit.h"
 #include "threads/interrupt.h"
 #include "threads/synch.h"
@@ -24,6 +25,15 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* List of threads blocked on timer intervals */
+static struct list blocked_thds;
+static struct lock blocked_thds_lock;
+static struct thread *timerThread=NULL;
+
+void timer_thread(void *aux);
+bool time_comparator (const struct list_elem *e1,
+                      const struct list_elem *e2, void *aux);
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -34,6 +44,9 @@ static void real_time_delay (int64_t num, int32_t denom);
    and registers the corresponding interrupt. */
 void timer_init (void)
 {
+  list_init(&blocked_thds);
+  lock_init(&blocked_thds_lock);
+  thread_create("timer", PRI_DEFAULT, timer_thread, NULL);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -78,15 +91,93 @@ int64_t timer_ticks (void)
    should be a value once returned by timer_ticks(). */
 int64_t timer_elapsed (int64_t then) { return timer_ticks () - then; }
 
+
+/* Begin - User defined func implementations */
+/* Wakes any blocked thread whose timer is completed */
+void timer_thread(void *aux UNUSED)
+{
+  enum intr_level old_level;
+  timerThread = thread_current();
+  while (true)
+  {
+    if (lock_try_acquire(&blocked_thds_lock))
+    {
+      if (list_empty(&blocked_thds))
+      {
+          lock_release(&blocked_thds_lock);
+          old_level = intr_disable();
+          thread_block();
+          intr_set_level(old_level);
+          continue;
+      }
+
+      struct list_elem *f = list_front(&blocked_thds);
+
+      if (list_entry(f, struct thread, timer_elem)->wakeup_tick <= timer_ticks())
+      {
+        struct thread *t = list_entry(f, struct thread, timer_elem);
+        list_pop_front(&blocked_thds);
+        lock_release(&blocked_thds_lock);
+        thread_unblock(t);
+      }
+      else
+      {
+        lock_release(&blocked_thds_lock);
+        old_level = intr_disable();
+        thread_block();
+        intr_set_level(old_level);
+        continue;
+      }
+    }
+  }
+
+  return;
+}
+
+// list ordered from smallest wakeup time to largest wakeup time
+bool
+time_comparator (const struct list_elem *e1,
+                 const struct list_elem *e2, void *aux UNUSED)
+{
+    struct thread* t1 = list_entry (e1, struct thread, timer_elem);
+    struct thread* t2 = list_entry (e2, struct thread, timer_elem);
+
+    if( t1->wakeup_tick < t2->wakeup_tick)
+        return true;
+    else if (t1->wakeup_tick == t2->wakeup_tick){
+        if( t1->priority > t2->priority)
+            return true;
+    }
+    return false;
+}
+
+/* End - User defined func implementations */
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void timer_sleep (int64_t ticks)
 {
-  int64_t start = timer_ticks ();
-
+  struct thread* cur = NULL;
+  enum intr_level old_level;
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks)
-    thread_yield ();
+  if (ticks < 0)
+      return;
+
+  cur = thread_current();
+
+  cur->wakeup_tick = timer_ticks() + ticks;
+
+  while (true) {
+    if (lock_try_acquire(&blocked_thds_lock)) {
+      list_insert_ordered (&blocked_thds, &cur->timer_elem, time_comparator, NULL);
+      lock_release(&blocked_thds_lock);
+      break;
+    }
+  }
+
+  old_level = intr_disable();
+  thread_block();
+  intr_set_level(old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -139,6 +230,8 @@ static void timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  if (timerThread && timerThread->status == THREAD_BLOCKED)
+      thread_unblock(timerThread);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

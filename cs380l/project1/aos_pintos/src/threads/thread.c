@@ -71,6 +71,40 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* return true if t1->prio > t2->prio */
+bool priority_comparator(const struct list_elem *l1, const struct list_elem *l2,void *aux UNUSED)
+{
+  struct thread *t1 = list_entry(l1,struct thread,elem);
+  struct thread *t2 = list_entry(l2,struct thread,elem);
+  if( t1->priority > t2->priority)
+    return true;
+  return false;
+}
+
+void sort_ready_list(void)
+{
+  list_sort(&ready_list, priority_comparator, 0);
+}
+
+/* search the inherited_prio list for the inherited priority
+   and remove it from the list */
+void clear_inherited_priority(struct thread *cur,int prio)
+{
+  int i, found = 0;
+  for(i = 0; i < (cur->inherited_prio_size)-1; i++)
+  {
+    if(cur->inherited_priorities[i] == prio)
+    {
+      found = 1;
+    }
+    if(found == 1)
+    {
+      cur->inherited_priorities[i] = cur->inherited_priorities[i+1];
+    }
+  }
+  cur->inherited_prio_size--;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -195,6 +229,7 @@ tid_t thread_create (const char *name, int priority, thread_func *function,
 
   /* Add to run queue. */
   thread_unblock (t);
+  thread_yield();
 
   return tid;
 }
@@ -230,7 +265,7 @@ void thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, priority_comparator, 0);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -290,7 +325,7 @@ void thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, priority_comparator, 0);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -314,7 +349,12 @@ void thread_foreach (thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority (int new_priority)
 {
-  thread_current ()->priority = new_priority;
+  thread_current()->inherited_priorities[0] = new_priority;
+  if (thread_current()->inherited_prio_size == 1)
+  {
+      thread_current()->priority = new_priority;
+      thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -427,8 +467,11 @@ static void init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->inherited_priorities[0] = priority;
+  t->inherited_prio_size = 1;
+  t->inheritence_depth = 0;
   t->magic = THREAD_MAGIC;
-
+  t->waiting_for = NULL;
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
