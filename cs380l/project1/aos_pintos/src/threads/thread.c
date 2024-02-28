@@ -90,14 +90,14 @@ void sort_ready_list(void)
    and remove it from the list */
 void clear_inherited_priority(struct thread *cur,int prio)
 {
-  int i, found = 0;
+  int i, prio_found = 0;
   for(i = 0; i < (cur->inherited_prio_size)-1; i++)
   {
     if(cur->inherited_priorities[i] == prio)
     {
-      found = 1;
+      prio_found = 1;
     }
-    if(found == 1)
+    if(prio_found == 1)
     {
       cur->inherited_priorities[i] = cur->inherited_priorities[i+1];
     }
@@ -265,7 +265,8 @@ void thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, priority_comparator, 0);
+  list_insert_ordered (&ready_list, &t->elem,
+                       priority_comparator, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -325,7 +326,8 @@ void thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered (&ready_list, &cur->elem, priority_comparator, 0);
+    list_insert_ordered (&ready_list, &cur->elem,
+                         priority_comparator, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -352,8 +354,8 @@ void thread_set_priority (int new_priority)
   thread_current()->inherited_priorities[0] = new_priority;
   if (thread_current()->inherited_prio_size == 1)
   {
-      thread_current()->priority = new_priority;
-      thread_yield();
+    thread_current()->priority = new_priority;
+    thread_yield();
   }
 }
 
@@ -469,7 +471,7 @@ static void init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->inherited_priorities[0] = priority;
   t->inherited_prio_size = 1;
-  t->inheritence_depth = 0;
+  t->inheritance_depth = 0;
   t->magic = THREAD_MAGIC;
   t->waiting_for = NULL;
   old_level = intr_disable ();

@@ -100,7 +100,7 @@ struct thread
 
   int inherited_priorities[32];
   int inherited_prio_size;
-  int inheritence_depth;
+  int inheritance_depth;
   struct lock *waiting_for;
 
 #ifdef USERPROG
